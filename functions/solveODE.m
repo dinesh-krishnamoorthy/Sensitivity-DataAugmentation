@@ -12,9 +12,7 @@ if nargin<8
         );
 end
 
-lbx = 0.*ones(size(sys.x));
-ubx = 1e5.*ones(size(sys.x));
-dx0 = -1e5.*ones(size(sys.x));
+global lbx ubx dx0
 
 assert(numel(sys.u)==numel(u_in))
 assert(numel(sys.d)==numel(d_val))
@@ -58,5 +56,6 @@ xf = wf(1:numel(sys.x));
 
 flag = solver.stats();
 exitflag =  flag.return_status;
+assert(flag.success==1,'Error! solveODE unsuccessful')
 
 

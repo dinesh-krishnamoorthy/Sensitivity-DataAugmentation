@@ -125,12 +125,6 @@ for k = 0:par.N-1
     
     J = J + par.ROC.*sum((Uk_prev - Uk).^2);
     
-    %     % MV Rate Of Change Constraints
-    %     g = {g{:},(Uk_prev - Uk)};
-    %     lbg = [lbg;-qGLROC];
-    %     ubg = [ubg;qGLROC];
-    
-    
     Uk_prev = MX.sym(['Uprev_' num2str(k+1)],nu);
     Uk_prev = Uk;
     
@@ -140,7 +134,6 @@ for k = 0:par.N-1
     lbw     = [lbw;lbx];
     ubw     = [ubw;ubx];
     w0      = [w0; dx0];
-    
     
     % Shooting Gap constraint
     g   = {g{:},Xk_end-Xk};

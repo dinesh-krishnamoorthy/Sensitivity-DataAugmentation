@@ -38,8 +38,8 @@ ubx = d_init + [0.2;0.2];
 
 par.N = 140;
 
-par.nData = 20; % no. of data points along each dimension solved as NLP
-par.nAug = 5; % no. of data points along each dimension solved using sensitivity update
+par.nData = 10; % no. of data points along each dimension solved as NLP
+par.nAug = 20; % no. of data points along each dimension solved using sensitivity update
 
 par.ROC = 0;
 [solver,par] = buildNLP(sys.f,par);
@@ -69,15 +69,21 @@ for sim_k = 1:par.nData^nx
     % ------ SOLVE OFFLINE OCP -------
     tic;
     sol = solver('x0',par.w0,'p',vertcat(x_i,u_init,d_init),'lbx',par.lbw,'ubx',par.ubw,'lbg',par.lbg,'ubg',par.ubg);
-    GenData.sol_t(i) = toc;
+    elapsednlp = toc;
     
     flag = solver.stats();
     exitflag =  flag.return_status;
-    disp(['Data point nr. ' num2str(i)  ' - ' exitflag '. CPU time: ' num2str(par.elapsednlp) 's'])
+    disp(['Data point nr. ' num2str(i+1)  ' - ' exitflag '. CPU time: ' num2str(elapsednlp) 's'])
     
     Primal = full(sol.x);
     Dual.lam_g = full(sol.lam_g);
     Dual.lam_x = full(sol.lam_x);
+    Dual.lam_p = full(sol.lam_p);
+    
+    indNLP = find((Primal(1:40)-par.lbw(1:40))<0);
+    indNLP = vertcat(indNLP,find((par.ubw(1:40)-Primal(1:40))<0));
+    
+    indAS = find(round(Dual.lam_x,6) >0);
     
     u1_opt = [Primal(nx+1:4*nx+nu:n_w_i);NaN];
     x1_opt = Primal([1,nu+4*nx+1:4*nx+nu:n_w_i]);
@@ -85,18 +91,26 @@ for sim_k = 1:par.nData^nx
     
     if flag.success
         i = i+1;
-        for n = 0:0
-            GenData.u(:,n+i) = u1_opt(n+1);
-            GenData.x(:,n+i) = vertcat(x1_opt(n+1),x2_opt(n+1),d_i);
-        end
+        GenData.u(:,i) = u1_opt(1);
+        GenData.x(:,i) = vertcat(x1_opt(1),x2_opt(1),d_i);
+        GenData.sol_t(i) = elapsednlp;
+        
+        GenData1.u(:,i) = u1_opt(1);
+        GenData1.x(:,i) = vertcat(x1_opt(1),x2_opt(1),d_i);
+        GenData1.sol_t(i) = elapsednlp;
+        
+        GenData0.u(:,i) = u1_opt(1);
+        GenData0.x(:,i) = vertcat(x1_opt(1),x2_opt(1),d_i);
+        GenData0.sol_t(i) = elapsednlp;
     end
     
     
     if sensitivity && flag.success
-        % ------- SENSITIVITY UPDATE -------
         
-        x1 = linspace(x_i(1)-0.0105,x_i(1)+0.0105,par.nAug);
-        x2 = linspace(x_i(2)-0.0105,x_i(2)+0.0105,par.nAug);
+        % ------- Data Augmentation -------
+        
+        x1 = max(lbx(1),min(ubx(1),linspace(x_i(1)-0.0105*2,x_i(1)+0.0105*2,par.nAug)));
+        x2 = max(lbx(2),min(ubx(2),linspace(x_i(2)-0.0105*2,x_i(2)+0.0105*2,par.nAug)));
         
         k = 0;
         for ij =1:numel(x1)
@@ -107,7 +121,6 @@ for sim_k = 1:par.nData^nx
         end
         for j = 1:par.nAug*par.nAug
             
-            i = i+1;
             p_init = vertcat(x_i,u_i,d_i);
             
             d_p = d_init;
@@ -115,49 +128,90 @@ for sim_k = 1:par.nData^nx
             
             p_final = vertcat(x_p,u_i,d_p);
             
-            [solLS,elapsed] = SolveLinSysOnline(Primal,Dual,p_init,p_final,par);
-            w_opt_p = Primal + full(solLS.dx);
-            disp(['Data point nr. ' num2str(i) '. CPU time: ' num2str(elapsed) 's'])
             
-            u1_opt_p = max(0,min(2,[w_opt_p(nx+1:4*nx+nu:n_w_i);NaN]));
-            x1_opt_p = w_opt_p([1,nu+4*nx+1:4*nx+nu:n_w_i]);
-            x2_opt_p = w_opt_p([2,nu+4*nx+2:4*nx+nu:n_w_i]);
+            % ----------- full NLP ------------
+            tic;
+            sol1 = solver('x0',par.w0,'p',vertcat(x_p,u_i,d_p),'lbx',par.lbw,'ubx',par.ubw,'lbg',par.lbg,'ubg',par.ubg);
+            elapsednlp1 = toc;
+            flag1 = solver.stats();
             
-            GenData.u(:,i) = u1_opt_p(1);
-            GenData.x(:,i) = vertcat(x1_opt_p(1),x2_opt_p(1),d_p);
-            GenData.sol_t(i) = elapsed;
+            Primal1 = full(sol1.x);
+            Dual1.lam_g = full(sol1.lam_g);
+            Dual1.lam_x = full(sol1.lam_x);
+            
+            u1_opt_p1 = [Primal1(nx+1:4*nx+nu:n_w_i);NaN];
+            
+            if flag1.success
+                i = i+1;
+                GenData1.u(:,i) = u1_opt_p1(1);
+                GenData1.x(:,i) = vertcat(x_p,d_p);
+                GenData1.sol_t(i) = elapsednlp1;
+                
+                GenData0.u(:,i) = NaN;
+                GenData0.x(:,i) = NaN*vertcat(x1_opt(1),x2_opt(1),d_i);
+                GenData0.sol_t(i) = NaN;
+            end
+            
+            
+            if flag1.success
+                % ----------- Tangential PRedictor ------------
+                
+                
+                [solLS,elapsed] = SolveLinSysOnline(Primal,Dual,vertcat(x_i,u_init,d_init),vertcat(x_p,u_i,d_p),par);
+                w_opt_p = Primal + full(solLS.dx);
+                lam_g_p = Dual.lam_g + full(solLS.lam_g);
+                lam_x_p = Dual.lam_x + full(solLS.lam_x);
+                
+                disp(['Data point nr. ' num2str(i) '. CPU time: ' num2str(elapsed) 's'])
+                
+                u1_opt_p = max(0,min(2,[w_opt_p(nx+1:4*nx+nu:n_w_i);NaN]));
+                x1_opt_p = w_opt_p([1,nu+4*nx+1:4*nx+nu:n_w_i]);   
+                x2_opt_p = w_opt_p([2,nu+4*nx+2:4*nx+nu:n_w_i]);
+                
+                indpNLP = find((w_opt_p(1:40)-par.lbw(1:40))<0);
+                indpNLP = vertcat(indpNLP,find((par.ubw(1:40)-w_opt_p(1:40))<0));
+                
+                indpAS = find(round(lam_x_p,6) >0);
+                
+                %              if all(u1_opt_p)>lbu && all(u1_opt_p)<ubu && all(all([x1_opt_p,x2_opt_p]>lbx')) && all(all([x1_opt_p,x2_opt_p]<ubx'))
+                
+                GenData.u(:,i) = u1_opt_p(1);
+                GenData.x(:,i) = vertcat(x1_opt_p(1),x2_opt_p(1),d_p);
+                GenData.sol_t(i) = elapsed;
+
+            end
         end
     end
 end
 
-% save('data/GenData','GenData')
+save('data/GenDataA','GenData')
 
-%% Train DNN
-
-load('data/GenData.mat')
-x = GenData.x';
-u = GenData.u';
-
-nNeurons = 10;
-nLayers = 3;
-trainFcn = 'trainlm';  % Levenberg-Marquardt backpropagation (default).
-hiddenLayerSize = nNeurons.*ones(1,nLayers);
-
-% Create a Fitting Network
-net = fitnet(hiddenLayerSize,trainFcn);
-
-% Setup Division of Data for Training, Validation, Testing
-net.divideParam.trainRatio = 70/100;
-net.divideParam.valRatio = 15/100;
-net.divideParam.testRatio = 15/100;
-
-% Train the Network
-[net,tr] = train(net,x',u');
-
-% Test the Network
-u_opt = net(x');
-e = gsubtract(u,u_opt);
-performance = perform(net,u,u_opt);
-
-% Generate Approximate MPC policy function
-genFunction(net,'ApproxMPC');
+% %% Train DNN
+%
+% load('data/GenData_activeSet.mat')
+% x = GenData.x';
+% u = GenData.u';
+%
+% nNeurons = 10;
+% nLayers = 3;
+% trainFcn = 'trainlm';  % Levenberg-Marquardt backpropagation (default).
+% hiddenLayerSize = nNeurons.*ones(1,nLayers);
+%
+% % Create a Fitting Network
+% net = fitnet(hiddenLayerSize,trainFcn);
+%
+% % Setup Division of Data for Training, Validation, Testing
+% net.divideParam.trainRatio = 70/100;
+% net.divideParam.valRatio = 15/100;
+% net.divideParam.testRatio = 15/100;
+%
+% % Train the Network
+% [net,tr] = train(net,x',u');
+%
+% % Test the Network
+% u_opt = net(x');
+% e = gsubtract(u,u_opt);
+% performance = perform(net,u,u_opt);
+%
+% % Generate Approximate MPC policy function
+% genFunction(net,'ApproxMPC_activeSet');
