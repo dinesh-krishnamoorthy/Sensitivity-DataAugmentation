@@ -144,13 +144,25 @@ for sim_k = 1:par.nData^nx
                 
                 GenData0.u(:,i) = NaN;
                 GenData0.x(:,i) = NaN*vertcat(x1_opt(1),x2_opt(1),d_i);
-                GenData0.sol_t(i) = NaN;
+%                 GenData0.sol_t(i) = NaN;
             end
             
             if flag1.success
                 % ----------- Tangential PRedictor ------------
-                
-                [solLS,elapsed] = SolveLinSysOnline(Primal,Dual,vertcat(x_i,u_init,d_init),vertcat(x_p,u_i,d_p),par);
+                if j == 1
+                    [solLS,elapsed,H] = SolveLinSysOnline(Primal,Dual,vertcat(x_i,u_init,d_init),vertcat(x_p,u_i,d_p),par);
+                    nw = numel(Primal);
+                    ng = numel(Dual.lam_g);
+                else
+                    dp = (vertcat(x_p,u_i,d_p)-vertcat(x_i,u_init,d_init));
+                    tic
+                    Delta_s = H*dp;
+                    elapsed = toc;
+                    
+                    solLS.dx = Delta_s(1:nw);
+                    solLS.lam_g = Delta_s(nw+1:nw+ng);
+                    solLS.lam_x = Delta_s(nw+ng+1:nw+ng+1);
+                end
                 w_opt_p = Primal + full(solLS.dx);
                 lam_g_p = Dual.lam_g + full(solLS.lam_g);
                 lam_x_p = Dual.lam_x + full(solLS.lam_x);
@@ -161,13 +173,13 @@ for sim_k = 1:par.nData^nx
                 x1_opt_p = w_opt_p([1,nu+4*nx+1:4*nx+nu:n_w_i]);
                 x2_opt_p = w_opt_p([2,nu+4*nx+2:4*nx+nu:n_w_i]);
                 
-%                 indpAS = find(round(lam_x_p,6) >0);
+                %                 indpAS = find(round(lam_x_p,6) >0);
                 
-%                 if indAS == indpAS % Check if active set is same
-                    GenData.u(:,i) = u1_opt_p(1);
-                    GenData.x(:,i) = vertcat(x1_opt_p(1),x2_opt_p(1),d_p);
-                    GenData.sol_t(i) = elapsed;
-%                 end
+                %                 if indAS == indpAS % Check if active set is same
+                GenData.u(:,i) = u1_opt_p(1);
+                GenData.x(:,i) = vertcat(x1_opt_p(1),x2_opt_p(1),d_p);
+                GenData.sol_t(i) = elapsed;
+                %                 end
             end
         end
     end
