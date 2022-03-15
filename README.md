@@ -8,6 +8,7 @@
    * ...
    
  
+ Example: Sensitivity-based data augmentation for the inverted pendulum example
 ![Data Augmetation for inverted pendulum](DataAugPlot.png)
 
 See the preprint and the slides in this repository for more detailed infromation. 
