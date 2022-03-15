@@ -7,5 +7,7 @@
    * Building climate control 
    * ...
    
+ 
+![Data Augmetation for inverted pendulum](DataAugPlot.png)
 
 See the preprint and the slides in this repository for more detailed infromation. 
